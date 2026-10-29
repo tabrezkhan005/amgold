@@ -12,6 +12,7 @@ import '../auth/auth_controller.dart';
 import '../bill/bill_controller.dart';
 import '../bill/bill_repository.dart';
 import '../bill/pdf_invoice.dart';
+import '../scan/scan_controller.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -105,6 +106,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
+          if (user?.isOwner == true) ...[
+            const Divider(),
+            Text('Owner', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.add_box_outlined),
+              title: const Text('Add product'),
+              subtitle: const Text('Photograph a design and save it for scanning'),
+              onTap: () async {
+                await ref.read(scanControllerProvider.notifier).disposeCamera();
+                if (!context.mounted) return;
+                await context.push('/owner/add-product');
+                if (context.mounted) {
+                  await ref.read(scanControllerProvider.notifier).initCamera();
+                }
+              },
+            ),
+          ],
           const Divider(),
           Text('App', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),

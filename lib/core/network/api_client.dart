@@ -1,5 +1,6 @@
 // Dio client for /v1: Bearer JWT + X-Device-Token, refresh on 401.
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -252,6 +253,79 @@ class ApiClient {
     final data = response.data;
     if (data == null) throw ApiException('Empty product response');
     return Product.fromJson(data);
+  }
+
+  /// Owner: create product with reference photos (searchable immediately).
+  Future<({Product product, List<String> photoIds, List<dynamic> warnings})>
+      createProduct({
+    required String name,
+    required String category,
+    required String price,
+    String material = 'rolled_gold',
+    String? weightG,
+    String? description,
+    String? differenceNote,
+    String unit = 'pcs',
+    String? code,
+    required List<Uint8List> photoBytes,
+  }) async {
+    if (photoBytes.isEmpty) {
+      throw ApiException('Add at least one photo before saving.');
+    }
+    final form = FormData();
+    form.fields.addAll([
+      MapEntry('name', name),
+      MapEntry('category', category),
+      MapEntry('price', price),
+      MapEntry('material', material),
+      MapEntry('unit', unit),
+      if (weightG != null && weightG.isNotEmpty) MapEntry('weight_g', weightG),
+      if (description != null && description.isNotEmpty)
+        MapEntry('description', description),
+      if (differenceNote != null && differenceNote.isNotEmpty)
+        MapEntry('difference_note', differenceNote),
+      if (code != null && code.isNotEmpty) MapEntry('code', code),
+    ]);
+    for (var i = 0; i < photoBytes.length; i++) {
+      form.files.add(
+        MapEntry(
+          'photos',
+          MultipartFile.fromBytes(
+            photoBytes[i],
+            filename: 'photo_$i.jpg',
+          ),
+        ),
+      );
+    }
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/v1/products',
+        data: form,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(minutes: 2),
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      );
+      final data = response.data;
+      if (data == null) throw ApiException('Empty response from create product');
+      final productRaw = data['product'];
+      if (productRaw is! Map<String, dynamic>) {
+        throw ApiException('Invalid product in create response');
+      }
+      final ids = (data['photo_ids'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList();
+      final warnings = data['photo_warnings'] as List<dynamic>? ?? const [];
+      return (
+        product: Product.fromJson(productRaw),
+        photoIds: ids,
+        warnings: warnings,
+      );
+    } on DioException catch (e) {
+      throw _mapDio(e);
+    }
   }
 
   Future<BillDraftRemote> createBillDraft({

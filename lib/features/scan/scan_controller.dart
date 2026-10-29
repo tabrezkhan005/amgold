@@ -55,6 +55,7 @@ class ScanUiState {
     bool? previewReady,
     bool clearError = false,
     bool clearController = false,
+    bool clearInitError = false,
   }) {
     return ScanUiState(
       phase: phase ?? this.phase,
@@ -62,7 +63,7 @@ class ScanUiState {
       controller: clearController ? null : (controller ?? this.controller),
       cameras: cameras ?? this.cameras,
       permissionDenied: permissionDenied ?? this.permissionDenied,
-      initError: initError ?? this.initError,
+      initError: clearInitError ? null : (initError ?? this.initError),
       flashOn: flashOn ?? this.flashOn,
       previewReady: clearController
           ? false
@@ -105,7 +106,7 @@ class ScanController extends Notifier<ScanUiState> {
     await disposeCamera();
     state = state.copyWith(
       permissionDenied: false,
-      initError: null,
+      clearInitError: true,
       clearError: true,
       flashOn: false,
       previewReady: false,

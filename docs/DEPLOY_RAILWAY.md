@@ -116,6 +116,29 @@ curl https://<your-domain>/health
 # {"ok":true}
 ```
 
+### Inference performance (scan + add-product)
+
+Docker bakes an **ONNX** DINOv2-small embed graph (`INFERENCE_BACKEND=onnx`). Build tries
+dynamic INT8 quantization and **keeps FP32** if torch↔ONNX cosine parity is below 0.999
+(common for DINOv2). Scan uses `embed_async` (thread pool); enroll runs up to **2**
+preprocess+embed+R2 workers.
+
+In Railway **amgold → Logs**, look for:
+
+- `embedder_backend=onnx` (or `torch` fallback) at startup
+- `scan_timing embed_ms=… search_ms=… total_ms=…`
+- `enroll_photos done … wall_ms=…`
+
+Local export / parity:
+
+```bash
+cd backend
+python scripts/export_onnx.py --out models/dinov2-small-embed.onnx --quantize
+pytest tests/test_onnx_parity.py -q
+```
+
+Optional env: `TORCH_NUM_THREADS`, `ORT_INTRA_OP_THREADS`, `INFERENCE_BACKEND=torch` to force PyTorch.
+
 ---
 
 ## 4. Usage limit and billing alert (do this before heavy testing)

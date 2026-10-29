@@ -143,6 +143,7 @@ def admin_health(
     return {
         "ok": True,
         "model_name": settings.model_name,
+        "inference_backend": emb.backend if emb else settings.inference_backend,
         "model_loaded": emb is not None,
         "embedder_dim": emb.dim if emb else None,
         "preprocessing_version": PREPROCESSING_VERSION,

@@ -8,6 +8,7 @@ import '../../features/auth/enroll_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/bill/bill_history_screen.dart';
 import '../../features/bill/bill_screen.dart';
+import '../../features/owner/add_product_screen.dart';
 import '../../features/product/product_detail_screen.dart';
 import '../../features/results/results_screen.dart';
 import '../../features/scan/scan_screen.dart';
@@ -85,6 +86,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/owner/add-product',
+        builder: (context, state) => const AddProductScreen(),
       ),
     ],
   );

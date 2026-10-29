@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -21,6 +24,20 @@ from app.schemas.products import ProductOut
 from app.services.storage import StorageService
 
 log = get_logger(__name__)
+
+# Match embedder semaphore: at most 2 concurrent preprocess+embed+R2 workers.
+_ENROLL_WORKERS = 2
+
+
+@dataclass
+class _PreparedPhoto:
+    index: int
+    full_bytes: bytes
+    thumb_bytes: bytes
+    embedding: list[float]
+    quality: Any
+    storage_key: str
+    thumb_key: str
 
 
 def product_to_out(
@@ -258,6 +275,53 @@ def write_audit(
     )
 
 
+def _materialize_one_photo(
+    *,
+    index: int,
+    raw: bytes,
+    product_id: uuid.UUID,
+    embedder: Embedder,
+    storage: StorageService,
+    total: int,
+) -> _PreparedPhoto:
+    if len(raw) > 10 * 1024 * 1024:
+        raise AppError("Image exceeds 10 MB", code="too_large", status_code=413)
+    log.info(
+        "enroll_photos[%s/%s] preprocess+embed bytes=%s",
+        index,
+        total,
+        len(raw),
+    )
+    full_bytes, thumb_bytes, quality = process_full_and_thumb(raw)
+    embedding = embedder.embed(full_bytes)
+    if embedding.shape[0] != 768:
+        raise AppError(
+            f"Embedding dim {embedding.shape[0]} != 768; use dinov2-small or migrate schema",
+            code="embedding_dim",
+            status_code=500,
+        )
+    storage_key = storage.new_object_key(prefix=f"products/{product_id}", suffix=".jpg")
+    thumb_key = storage.new_object_key(prefix=f"products/{product_id}/thumbs", suffix=".jpg")
+    storage.put_bytes(storage_key, full_bytes, content_type="image/jpeg")
+    storage.put_bytes(thumb_key, thumb_bytes, content_type="image/jpeg")
+    log.info(
+        "enroll_photos[%s/%s] stored full=%s thumb=%s",
+        index,
+        total,
+        storage_key,
+        thumb_key,
+    )
+    return _PreparedPhoto(
+        index=index,
+        full_bytes=full_bytes,
+        thumb_bytes=thumb_bytes,
+        embedding=embedding.tolist(),
+        quality=quality,
+        storage_key=storage_key,
+        thumb_key=thumb_key,
+    )
+
+
 def enroll_photos(
     db: Session,
     *,
@@ -276,32 +340,46 @@ def enroll_photos(
             status_code=400,
         )
 
+    total = len(photos)
+    started = time.perf_counter()
+    log.info(
+        "enroll_photos start product=%s code=%s count=%s source=%s workers=%s",
+        product.id,
+        product.code,
+        total,
+        source,
+        _ENROLL_WORKERS,
+    )
+
+    def _job(item: tuple[int, bytes]) -> _PreparedPhoto:
+        index, raw = item
+        return _materialize_one_photo(
+            index=index,
+            raw=raw,
+            product_id=product.id,
+            embedder=embedder,
+            storage=storage,
+            total=total,
+        )
+
+    indexed = list(enumerate(photos, start=1))
+    workers = min(_ENROLL_WORKERS, total)
+    if workers <= 1:
+        prepared = [_job(indexed[0])] if indexed else []
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            # map preserves input order → photo_ids stay aligned with upload order
+            prepared = list(pool.map(_job, indexed))
+
     photo_ids: list[uuid.UUID] = []
     warnings_out: list[dict[str, Any]] = []
-
-    for raw in photos:
-        if len(raw) > 10 * 1024 * 1024:
-            raise AppError("Image exceeds 10 MB", code="too_large", status_code=413)
-        full_bytes, thumb_bytes, quality = process_full_and_thumb(raw)
-        embedding = embedder.embed(full_bytes)
-        if embedding.shape[0] != 768:
-            # dinov2-base is 1536 — refuse silent mix with schema vector(768)
-            raise AppError(
-                f"Embedding dim {embedding.shape[0]} != 768; use dinov2-small or migrate schema",
-                code="embedding_dim",
-                status_code=500,
-            )
-        storage_key = storage.new_object_key(prefix=f"products/{product.id}", suffix=".jpg")
-        thumb_key = storage.new_object_key(prefix=f"products/{product.id}/thumbs", suffix=".jpg")
-        storage.put_bytes(storage_key, full_bytes, content_type="image/jpeg")
-        storage.put_bytes(thumb_key, thumb_bytes, content_type="image/jpeg")
-
+    for item in prepared:
         photo = ProductPhoto(
             id=uuid.uuid4(),
             product_id=product.id,
-            storage_key=storage_key,
-            thumb_key=thumb_key,
-            embedding=embedding.tolist(),
+            storage_key=item.storage_key,
+            thumb_key=item.thumb_key,
+            embedding=item.embedding,
             embedding_model=settings.model_name,
             preprocessing_version=PREPROCESSING_VERSION,
             source=source,
@@ -309,14 +387,15 @@ def enroll_photos(
         db.add(photo)
         db.flush()
         photo_ids.append(photo.id)
+        q = item.quality
         warnings_out.append(
             {
                 "photo_id": str(photo.id),
-                "warnings": quality.warnings,
-                "blur_var": quality.blur_var,
-                "brightness": quality.brightness,
-                "width": quality.width,
-                "height": quality.height,
+                "warnings": q.warnings,
+                "blur_var": q.blur_var,
+                "brightness": q.brightness,
+                "width": q.width,
+                "height": q.height,
             }
         )
 
@@ -327,6 +406,14 @@ def enroll_photos(
     if len(photos) < 5:
         warnings_out.append({"warnings": ["few_photos"], "count": len(photos)})
 
+    wall_ms = int((time.perf_counter() - started) * 1000)
+    log.info(
+        "enroll_photos done product=%s code=%s photos=%s wall_ms=%s",
+        product.id,
+        product.code,
+        len(photo_ids),
+        wall_ms,
+    )
     return photo_ids, warnings_out
 
 

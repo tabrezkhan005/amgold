@@ -77,6 +77,8 @@ backend/data/reference_photos/**/*.webp
 # ML / local caches
 .huggingface/
 **/torch_cache/
+backend/models/*.onnx
+backend/models/*.fp32.onnx
 
 # OS / editor
 Thumbs.db

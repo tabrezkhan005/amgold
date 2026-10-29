@@ -1,4 +1,4 @@
-# AmGold API — CPU PyTorch + DINOv2 weights baked in at build time.
+# AmGold API — CPU inference (ONNX preferred) + DINOv2 weights baked in at build.
 # Build context: backend/  (Railway Root Directory = backend)
 FROM python:3.12-slim-bookworm
 
@@ -20,7 +20,7 @@ RUN pip install --upgrade pip \
     && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && pip install -r requirements.txt
 
-# Bake model weights into the image (no download at startup).
+# Bake HF weights (used for ONNX export + torch fallback).
 ARG MODEL_NAME=facebook/dinov2-small
 ENV MODEL_NAME=${MODEL_NAME}
 RUN python -c "from transformers import AutoImageProcessor, AutoModel; \
@@ -31,8 +31,22 @@ RUN python -c "from transformers import AutoImageProcessor, AutoModel; \
 
 COPY . .
 
+# Export quantized ONNX embed graph (CLS∥mean + L2); parity gate fails the build.
+RUN mkdir -p /opt/models \
+    && python scripts/export_onnx.py \
+        --model "${MODEL_NAME}" \
+        --out /opt/models/dinov2-small-embed.onnx \
+        --quantize \
+        --min-cosine 0.999
+
 # One Uvicorn worker; Railway injects $PORT.
 ENV PORT=8000 \
-    LOAD_EMBEDDER=true
+    LOAD_EMBEDDER=true \
+    INFERENCE_BACKEND=onnx \
+    ONNX_MODEL_PATH=/opt/models/dinov2-small-embed.onnx \
+    TORCH_NUM_THREADS=2 \
+    TORCH_NUM_INTEROP_THREADS=1 \
+    ORT_INTRA_OP_THREADS=2 \
+    ORT_INTER_OP_THREADS=1
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

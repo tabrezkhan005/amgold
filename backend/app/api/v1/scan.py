@@ -37,7 +37,7 @@ async def scan(
     image: UploadFile = File(...),
 ) -> ScanOut:
     raw = await image.read()
-    scan_row, matches = scans_svc.run_scan(
+    scan_row, matches = await scans_svc.run_scan(
         db,
         image_bytes=raw,
         embedder=embedder,

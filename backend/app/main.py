@@ -70,13 +70,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # Production DINOv2 singleton (pgvector path).
         if settings.load_embedder:
-            ml_embedder.load_embedder(settings.model_name, warm_up=True)
+            # Propagate thread env before load (embedder also reads TORCH_NUM_THREADS).
+            import os
+
+            os.environ.setdefault(
+                "TORCH_NUM_THREADS", str(settings.torch_num_threads)
+            )
+            os.environ.setdefault(
+                "TORCH_NUM_INTEROP_THREADS",
+                str(settings.torch_num_interop_threads),
+            )
+            emb = ml_embedder.load_embedder(
+                settings.model_name,
+                warm_up=True,
+                backend=settings.inference_backend,
+                onnx_path=settings.onnx_model_path,
+            )
+            log.info(
+                "embedder_ready backend=%s model=%s",
+                emb.backend,
+                settings.model_name,
+            )
 
         app.state.amgold = state
         log.info(
-            "app_started model=%s load_embedder=%s",
+            "app_started model=%s load_embedder=%s inference_backend=%s",
             settings.model_name,
             settings.load_embedder,
+            settings.inference_backend,
         )
         yield
         if settings.load_embedder:

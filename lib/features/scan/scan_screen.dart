@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/connectivity_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/bill_badge_button.dart';
+import '../../widgets/safe_camera_preview.dart';
+import '../auth/auth_controller.dart';
 import 'scan_controller.dart';
 import 'widgets/scan_overlay.dart';
 
@@ -37,8 +39,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final notifier = ref.read(scanControllerProvider.notifier);
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
+    // Avoid dispose on inactive — permission dialogs / brief focus loss
+    // otherwise tear down the controller mid-preview (null previewSize crash).
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
       notifier.disposeCamera();
     } else if (state == AppLifecycleState.resumed) {
       notifier.initCamera();
@@ -72,6 +76,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     final scan = ref.watch(scanControllerProvider);
     final controller = scan.controller;
     final offline = ref.watch(isOfflineProvider);
+    final isOwner = ref.watch(authControllerProvider).user?.isOwner ?? false;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -87,6 +92,19 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
                     onPressed: () => context.push('/search'),
                     icon: const Icon(Icons.search, color: Colors.white),
                   ),
+                  if (isOwner)
+                    IconButton(
+                      tooltip: 'Add product',
+                      onPressed: () async {
+                        final scanCtrl =
+                            ref.read(scanControllerProvider.notifier);
+                        await scanCtrl.disposeCamera();
+                        if (!context.mounted) return;
+                        await context.push('/owner/add-product');
+                        if (context.mounted) await scanCtrl.initCamera();
+                      },
+                      icon: const Icon(Icons.add_box_outlined, color: Colors.white),
+                    ),
                   const Expanded(
                     child: Text(
                       'Scan design',
@@ -204,7 +222,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Center(child: CameraPreview(controller)),
+              Center(child: SafeCameraPreview(controller)),
               ScanOverlay(scanning: scan.phase == ScanPhase.uploading),
             ],
           ),

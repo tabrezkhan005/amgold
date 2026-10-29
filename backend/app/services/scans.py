@@ -10,14 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.config import PREPROCESSING_VERSION, Settings
 from app.core.errors import AppError
+from app.core.logging import get_logger
 from app.db.models import Product, ProductPhoto, Scan
 from app.ml.embedder import Embedder
 from app.ml.search import search_catalog
 from app.services import catalog as catalog_svc
 from app.services.storage import StorageService
 
+log = get_logger(__name__)
 
-def run_scan(
+
+async def run_scan(
     db: Session,
     *,
     image_bytes: bytes,
@@ -31,7 +34,10 @@ def run_scan(
         raise AppError("Image exceeds 10 MB", code="too_large", status_code=413)
 
     started = time.perf_counter()
-    query = embedder.embed(image_bytes)
+    query = await embedder.embed_async(image_bytes)
+    embed_ms = int((time.perf_counter() - started) * 1000)
+
+    search_started = time.perf_counter()
     outcome = search_catalog(
         db,
         query,
@@ -41,7 +47,16 @@ def run_scan(
         ambiguity_margin=settings.ambiguity_margin,
         min_confidence=settings.min_confidence,
     )
+    search_ms = int((time.perf_counter() - search_started) * 1000)
     latency_ms = int((time.perf_counter() - started) * 1000)
+    log.info(
+        "scan_timing embed_ms=%s search_ms=%s total_ms=%s backend=%s matches=%s",
+        embed_ms,
+        search_ms,
+        latency_ms,
+        getattr(embedder, "backend", "torch"),
+        len(outcome.matches),
+    )
 
     image_key = None
     save_mode = settings.save_scan_images

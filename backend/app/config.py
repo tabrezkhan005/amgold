@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     r2_public_base_url: str | None = None
     storage_local_dir: str = "data/storage"
     model_name: str = "facebook/dinov2-small"
+    # onnx | torch — onnx preferred on Railway CPU when the baked model exists
+    inference_backend: str = "onnx"
+    onnx_model_path: str = "/opt/models/dinov2-small-embed.onnx"
+    torch_num_threads: int = 2
+    torch_num_interop_threads: int = 1
     top_k: int = 5
     ambiguity_margin: float = 0.05
     min_confidence: float = 0.50

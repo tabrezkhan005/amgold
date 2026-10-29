@@ -19,6 +19,9 @@ boto3>=1.35.0
 botocore>=1.35.0
 python-jose[cryptography]>=3.3.0
 argon2-cffi>=23.1.0
+onnx>=1.16.0
+onnxruntime>=1.19.0
+onnxscript>=0.1.0
 
 
 # Install CPU PyTorch separately for local/dev (see README / Dockerfile):
