@@ -1,0 +1,1 @@
+﻿# AmGold FastAPI application package.

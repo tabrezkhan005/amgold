@@ -1,0 +1,22 @@
+# Local development: Postgres with pgvector. API runs on the host (uvicorn).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: amgold-postgres
+    environment:
+      POSTGRES_USER: amgold
+      POSTGRES_PASSWORD: amgold
+      POSTGRES_DB: amgold
+    ports:
+      # Host 5433 avoids clashing with a local Windows Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - amgold_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amgold -d amgold"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  amgold_pgdata:

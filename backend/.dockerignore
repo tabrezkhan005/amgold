@@ -1,0 +1,14 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+data/index
+data/logs
+data/storage
+data/reference_photos
+*.md
+tests
+.pytest_cache

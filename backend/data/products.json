@@ -1,0 +1,44 @@
+[
+  {
+    "id": "P001",
+    "name": "Design P001",
+    "category": "other",
+    "material": "rolled_gold",
+    "price": 450.0,
+    "weight_g": 20.0,
+    "description": "PLACEHOLDER - Update name/price/weight for your real design.",
+    "image": "P001/01.jpg",
+    "similar_to": [],
+    "difference": "",
+    "in_stock": true,
+    "active": true
+  },
+  {
+    "id": "P002",
+    "name": "Design P002",
+    "category": "other",
+    "material": "rolled_gold",
+    "price": 420.0,
+    "weight_g": 18.0,
+    "description": "PLACEHOLDER - Update name/price/weight for your real design.",
+    "image": "P002/001.jpg",
+    "similar_to": [],
+    "difference": "",
+    "in_stock": true,
+    "active": true
+  },
+  {
+    "id": "P003",
+    "name": "Design P003",
+    "category": "other",
+    "material": "rolled_gold",
+    "price": 380.0,
+    "weight_g": 15.0,
+    "description": "PLACEHOLDER - Update name/price/weight for your real design.",
+    "image": "P003/0001.jpg",
+    "similar_to": [],
+    "difference": "",
+    "in_stock": true,
+    "active": true
+  }
+]
